@@ -1,0 +1,265 @@
+<!-- index.html -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.1/jquery-ui.min.js"></script>
+    <title>Image Processing App</title>
+    <style>
+        .slider {
+            width: 200px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        .container {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .images {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .images img {
+            max-width: 400px;
+            margin-right: 20px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-right: 10px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .slider-container {
+            width: 33%;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Processing App</h1>
+        <label for="upload_input" class="btn">选择文件</label>
+        <input type="file" id="upload_input" accept="image/*" style="display: none;" />
+        <br>
+        <br>
+        <button class="btn" id="upload_button" onclick="upload()">Upload</button>
+        <button class="btn" id="sharpen_button" onclick="sharpen()">Sharpen</button>
+        <button class="btn" id="binarize_button" onclick="binarize()">Binarize</button>
+        <br />
+        <div class="slider-container">
+            <label for="sharpen_slider">Sharpen Factor:</label>
+            <div id="sharpen_slider"></div>
+            <span id="sharpen_value">2</span>
+        </div>
+    
+        <div class="slider-container">
+            <label for="binarize_slider">Binarize Threshold:</label>
+            <div id="binarize_slider"></div>
+            <span id="binarize_value">50</span>
+        </div>
+        <div class="images">
+            <div class="image-container">
+                <h2>Original Image </h2>
+                <img id="preview_image" src="" alt="Preview" />
+                <br>
+                <button class="btn" onclick="download('original')">Download Original</button>
+            </div>
+            <div class="image-container">
+                <h2>Sharpened Image </h2>
+                <img id="sharpened_image" src="" alt="Sharpened Image" />
+                <br>
+                <button class="btn" onclick="download('sharpened')">Download Sharpened</button>
+            </div>
+            <div class="image-container">
+                <h2>Binarized Image </h2>
+                <img id="binarized_image" src="" alt="Binarized Image" />
+                <br>
+                <button class="btn" onclick="download('binarized')">Download Binarized</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function upload() {
+            const button = document.getElementById('upload_button');
+            button.disabled = true; // 将按钮置为不可用状态
+
+            const fileInput = document.getElementById('upload_input');
+            const file = fileInput.files[0];
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('filename', file.name);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(message => {
+                console.log(message);
+                alert(message);
+            })
+            .catch(error => {
+                console.error(error);
+                alert('Upload failed!');
+            })
+            .finally(() => {
+                button.disabled = false; // 在请求返回后将按钮置为可用状态
+            });
+        }
+
+        function download(type) {
+            let filename = '';
+            let downloadBtn;
+            if (type === 'original') {
+                filename = document.getElementById('upload_input').files[0]?.name;
+            } else if (type === 'sharpened') {
+                filename = "sharpen_" + document.getElementById('upload_input').files[0]?.name + '.jpg';
+            } else if (type === 'binarized') {
+                filename = "binary_" + document.getElementById('upload_input').files[0]?.name + '.jpg';
+            }
+            if (!filename) {
+                alert('Please upload an image first.');
+                return;
+            }
+            fetch('/download', {
+                method: 'POST',
+                body: JSON.stringify({ filename: filename }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            })
+            .catch(error => {
+                console.error(error);
+                alert('Error occurred while downloading image!');
+            });
+        }
+        
+        function sharpen() {
+            const button = document.getElementById('sharpen_button');
+            button.disabled = true; // 将按钮置为不可用状态
+
+            const sharpenFactor = $('#sharpen_slider').slider('value');
+            const filename = document.getElementById('upload_input').files[0]?.name;
+
+            fetch('/sharpen', {
+                method: 'POST',
+                body: JSON.stringify({ filename: filename, param: sharpenFactor }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const sharpenedImage = document.getElementById('sharpened_image');
+                sharpenedImage.src = URL.createObjectURL(blob);
+            })
+            .catch(error => {
+                console.error(error);
+                alert('Error occurred while sharpening image!');
+            })
+            .finally(() => {
+                button.disabled = false; // 在请求返回后将按钮置为可用状态
+            });
+        }
+
+        function binarize() {
+            const button = document.getElementById('binarize_button');
+            button.disabled = true; // 将按钮置为不可用状态
+
+            const binarizeThreshold = $('#binarize_slider').slider('value');
+            const filename = document.getElementById('upload_input').files[0]?.name;
+
+            fetch('/binarize', {
+                method: 'POST',
+                body: JSON.stringify({ filename: filename, param: binarizeThreshold }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const binarizedImage = document.getElementById('binarized_image');
+                binarizedImage.src = URL.createObjectURL(blob);
+            })
+            .catch(error => {
+                console.error(error);
+                alert('Error occurred while binarizing image!');
+            })
+            .finally(() => {
+                button.disabled = false; // 在请求返回后将按钮置为可用状态
+            });
+        }
+
+        const fileInput = document.getElementById('upload_input');
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const previewImage = document.getElementById('preview_image');
+                previewImage.src = e.target.result;
+
+                // Reset sharpened and binarized images
+                const sharpenedImage = document.getElementById('sharpened_image');
+                sharpenedImage.src = '';
+                const binarizedImage = document.getElementById('binarized_image');
+                binarizedImage.src = '';
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+        $(document).ready(function() {
+            // 获取屏幕宽度的一半作为滑动条的宽度
+            var sliderWidth = $(window).width() / 3;
+            
+            // 创建并设置参数滑动条
+            $('#sharpen_slider').slider({
+                min: 1,
+                max: 10,
+                value: 2,
+                width: sliderWidth,
+                slide: function(event, ui) {
+                    $('#sharpen_value').text(ui.value);   // 实时更新显示滑动条的值
+                },
+                change: function(event, ui) {
+                    $('#sharpen_value').text(ui.value);   // 最终选定的滑动条值
+                }
+            });
+
+            $('#binarize_slider').slider({
+                min: 0,
+                max: 255,
+                value: 128,
+                width: sliderWidth,
+                slide: function(event, ui) {
+                    $('#binarize_value').text(ui.value);   // 实时更新显示滑动条的值
+                },
+                change: function(event, ui) {
+                    $('#binarize_value').text(ui.value);   // 最终选定的滑动条值
+                }
+                    });
+        });
+    </script>
+</body>
+</html>
