@@ -30,7 +30,7 @@
         .btn {
             display: inline-block;
             padding: 10px 20px;
-            margin-right: 10px;
+            margin-left: 10px;
             background-color: #4CAF50;
             color: white;
             text-decoration: none;
@@ -40,23 +40,47 @@
             width: 33%;
             margin: 0 auto;
         }
+        .inline-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .inline-container label {
+            margin-right: 10px;
+        }
+        .inline-container select {
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Image Processing App</h1>
-        <label for="upload_input" class="btn">选择文件</label>
-        <input type="file" id="upload_input" accept="image/*" style="display: none;" />
+        <div class="inline-container">
+            <button class="btn" id="choose_button" onclick="document.getElementById('upload_input').click()">选择文件</button>
+            <input type="file" id="upload_input" accept="image/*" style="display: none;" />
+            <button class="btn" id="upload_button" onclick="upload()">Upload</button>
+        </div>
         <br>
         <br>
-        <button class="btn" id="upload_button" onclick="upload()">Upload</button>
         <button class="btn" id="sharpen_button" onclick="sharpen()">Sharpen</button>
         <button class="btn" id="binarize_button" onclick="binarize()">Binarize</button>
         <br />
-        <div class="slider-container">
-            <label for="sharpen_slider">Sharpen Factor:</label>
-            <div id="sharpen_slider"></div>
-            <span id="sharpen_value">2</span>
+        <div class="inline-container">
+            <div class="slider-container">
+                <label for="sharpen_slider">Sharpen Factor:</label>
+                <div id="sharpen_slider"></div>
+                <span id="sharpen_value">1</span>
+            </div>
+        
+            <label for="sharpen_type">Sharpen Type:</label>
+            <select id="sharpen_type">
+                <option value="laplacian1" selected>Laplacian1</option>
+                <option value="laplacian2" selected>Laplacian2</option>
+                <option value="laplacian3" selected>Laplacian3</option>
+                <option value="unsharp">Unsharp</option>
+                <option value="scharr">Scharr</option>
+            </select>
         </div>
     
         <div class="slider-container">
@@ -90,20 +114,26 @@
         function upload() {
             const button = document.getElementById('upload_button');
             button.disabled = true; // 将按钮置为不可用状态
-
+        
             const fileInput = document.getElementById('upload_input');
             const file = fileInput.files[0];
-
+        
             const formData = new FormData();
             formData.append('file', file);
             formData.append('filename', file.name);
-
+        
+            const startTime = performance.now(); // 记录开始时间
+        
             fetch('/upload', {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.text())
             .then(message => {
+                const endTime = performance.now(); // 记录结束时间
+                const elapsed = endTime - startTime; // 计算耗时
+                console.log("upload elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+        
                 console.log(message);
                 alert(message);
             })
@@ -115,29 +145,37 @@
                 button.disabled = false; // 在请求返回后将按钮置为可用状态
             });
         }
-
+        
         function download(type) {
+            startTime = performance.now(); // 记录开始时间
+        
             let filename = '';
             let downloadBtn;
             if (type === 'original') {
                 filename = document.getElementById('upload_input').files[0]?.name;
             } else if (type === 'sharpened') {
-                filename = "sharpen_" + document.getElementById('upload_input').files[0]?.name + '.jpg';
+                filename = "sharpen_" + document.getElementById('upload_input').files[0]?.name;
             } else if (type === 'binarized') {
-                filename = "binary_" + document.getElementById('upload_input').files[0]?.name + '.jpg';
+                filename = "binary_" + document.getElementById('upload_input').files[0]?.name;
             }
             if (!filename) {
                 alert('Please upload an image first.');
                 return;
             }
+            const formData = new FormData();
+            formData.append('filename', filename);
+        
             fetch('/download', {
                 method: 'POST',
-                body: JSON.stringify({ filename: filename }),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                body: formData
             })
-            .then(response => response.blob())
+            .then(response => {
+                const endTime = performance.now(); // 记录结束时间
+                const elapsed = endTime - startTime; // 计算耗时
+                startTime = endTime;
+                console.log("download elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+                return response.blob();
+            })
             .then(blob => {
                 const downloadUrl = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -147,6 +185,12 @@
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
+        
+                const endTime = performance.now(); // 记录结束时间
+                const elapsed = endTime - startTime; // 计算耗时
+                console.log("download elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+        
+                alert('Success!');
             })
             .catch(error => {
                 console.error(error);
@@ -157,21 +201,46 @@
         function sharpen() {
             const button = document.getElementById('sharpen_button');
             button.disabled = true; // 将按钮置为不可用状态
-
+            
+            const sharpenType = document.getElementById('sharpen_type').value;
             const sharpenFactor = $('#sharpen_slider').slider('value');
             const filename = document.getElementById('upload_input').files[0]?.name;
-
+        
+            if (!filename) {
+                alert("Please upload an image first.");
+                return;
+            }
+        
+            const sharpenedImage = document.getElementById('sharpened_image');
+            if (sharpenedImage.src !== '') {
+                URL.revokeObjectURL(sharpenedImage.src); // 释放之前显示的图片资源
+            }
+            sharpenedImage.src = ''; // 删除当前显示的图片
+        
+            startTime = performance.now(); // 记录开始时间
+        
             fetch('/sharpen', {
                 method: 'POST',
-                body: JSON.stringify({ filename: filename, param: sharpenFactor }),
+                body: JSON.stringify({ filename: filename, param: sharpenFactor, type: sharpenType}),
                 headers: {
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.blob())
+            .then(response => {
+                const endTime = performance.now(); // 记录结束时间
+                const elapsed = endTime - startTime; // 计算耗时
+                startTime = endTime;
+                console.log("sharpen elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+                return response.blob();
+            })
             .then(blob => {
-                const sharpenedImage = document.getElementById('sharpened_image');
-                sharpenedImage.src = URL.createObjectURL(blob);
+                sharpenedImage.src = URL.createObjectURL(blob); // 显示请求返回的图片
+                
+                const endTime = performance.now(); // 记录结束时间
+                const elapsed = endTime - startTime; // 计算耗时
+                console.log("sharpen elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+        
+                alert('Success!');
             })
             .catch(error => {
                 console.error(error);
@@ -181,35 +250,56 @@
                 button.disabled = false; // 在请求返回后将按钮置为可用状态
             });
         }
-
+        
         function binarize() {
-            const button = document.getElementById('binarize_button');
-            button.disabled = true; // 将按钮置为不可用状态
-
-            const binarizeThreshold = $('#binarize_slider').slider('value');
-            const filename = document.getElementById('upload_input').files[0]?.name;
-
-            fetch('/binarize', {
-                method: 'POST',
-                body: JSON.stringify({ filename: filename, param: binarizeThreshold }),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => response.blob())
-            .then(blob => {
-                const binarizedImage = document.getElementById('binarized_image');
-                binarizedImage.src = URL.createObjectURL(blob);
-            })
-            .catch(error => {
-                console.error(error);
-                alert('Error occurred while binarizing image!');
-            })
-            .finally(() => {
-                button.disabled = false; // 在请求返回后将按钮置为可用状态
-            });
+        const button = document.getElementById('binarize_button');
+        button.disabled = true; // 将按钮置为不可用状态
+        const binarizeThreshold = $('#binarize_slider').slider('value');
+        const filename = document.getElementById('upload_input').files[0]?.name;
+        if (!filename) {
+            alert("Please upload an image first.");
+            return;
         }
-
+        
+        const binarizedImage = document.getElementById('binarized_image');
+        if (binarizedImage.src !== '') {
+            URL.revokeObjectURL(binarizedImage.src); // 释放之前显示的图片资源
+        }
+        binarizedImage.src = ''; // 删除当前显示的图片
+        
+        startTime = performance.now(); // 记录开始时间
+        
+        fetch('/binarize', {
+            method: 'POST',
+            body: JSON.stringify({ filename: filename, param: binarizeThreshold }),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            const endTime = performance.now(); // 记录结束时间
+            const elapsed = endTime - startTime; // 计算耗时
+            startTime = endTime;
+            console.log("binarize elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+            return response.blob();
+        })
+        .then(blob => {
+            binarizedImage.src = URL.createObjectURL(blob); // 显示请求返回的图片
+            
+            const endTime = performance.now(); // 记录结束时间
+            const elapsed = endTime - startTime; // 计算耗时
+            console.log("binarize elapsed time: " + elapsed + " milliseconds"); // 打印耗时
+        
+            alert('Success!');
+        })
+        .catch(error => {
+            console.error(error);
+            alert('Error occurred while binarizing image!');
+        })
+        .finally(() => {
+            button.disabled = false; // 在请求返回后将按钮置为可用状态
+        });
+    }
         const fileInput = document.getElementById('upload_input');
         fileInput.addEventListener('change', () => {
             const file = fileInput.files[0];
@@ -237,7 +327,7 @@
             $('#sharpen_slider').slider({
                 min: 1,
                 max: 10,
-                value: 2,
+                value: 1,
                 width: sliderWidth,
                 slide: function(event, ui) {
                     $('#sharpen_value').text(ui.value);   // 实时更新显示滑动条的值

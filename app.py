@@ -6,6 +6,8 @@ import os
 import logging
 from ratelimit import limits, sleep_and_retry
 
+from logic.sharpen_operator import ImageSharpeningFactory
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = ['jpg', 'jpeg', 'png', 'gif']
@@ -31,6 +33,7 @@ def index():
 @sleep_and_retry
 @limits(calls=2, period=1)  # 每秒最多调用两次
 def upload():
+    app.logger.info("upload start")
     file = request.files['file']
     if file and allowed_file(file.filename):
         # Save the uploaded file
@@ -41,14 +44,19 @@ def upload():
     app.logger.info("upload failed")
     return 'Invalid file format.', 200
 
-@app.route('/download')
+@app.route('/download', methods=['POST'])
 @sleep_and_retry
-@limits(calls=2, period=1)  # 每秒最多调用两次
+@limits(calls=10, period=1)  # 每秒最多调用10次
 def download():
     try:
-        filename = '<filename>'  # Fill in the actual filename here
-        app.logger.info("download success")
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+        app.logger.info("download start")
+        filename = request.form['filename']
+        if allowed_file(filename):
+            app.logger.info("download success")
+            sharpened_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            return send_file(sharpened_path, mimetype='image/jpeg')
+        else:
+            return 'Invalid file format.', 200
     except BaseException as e:
         app.logger.error(e)
         return str(e), 200
@@ -59,8 +67,10 @@ def download():
 @limits(calls=2, period=1)  # 每秒最多调用两次
 def sharpen():
     try:
+        app.logger.info("sharpen start")
         filename = request.json['filename']
         sharpenFactor = request.json['param']
+        sharpening_type = request.json['type'] # 可以更改为'unsharp'或'scharr'
     except BaseException as e:
         app.logger.error(e)
         return str(e), 200
@@ -69,7 +79,8 @@ def sharpen():
         image = cv2.imread(image_path)
 
         # Apply sharpening filter on the image
-        sharpened = cv2.filter2D(image, -1, kernel=sharpenFactor * np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]]))
+        sharpening_instance = ImageSharpeningFactory.create_sharpening_instance(sharpening_type)
+        sharpened = sharpening_instance.sharpen(image, sharpenFactor)
         
         # Save the sharpened image
         sharpened_path = os.path.join(app.config['UPLOAD_FOLDER'], "sharpen_" + filename)
@@ -85,6 +96,7 @@ def sharpen():
 @limits(calls=2, period=1)  # 每秒最多调用两次
 def binarize():
     try:
+        app.logger.info("binarize start")
         filename = request.json['filename']
         threshold = request.json['param']
     except BaseException as e:
